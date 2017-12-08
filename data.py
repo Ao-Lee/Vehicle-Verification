@@ -39,15 +39,14 @@ class CarvanaReader(object):
         
         return path_anchor, path_pos, path_neg
      
-
-'''
-mix a list of readers together
-usage:
-    reader_PCD = PCDReader(dir_images='E:\\DM\\PCD\\aligned')
-    reader_AR = ARFaceReader(dir_images='E:\\DM\\ARFace\\aligned')
-    reader_LFW = LFWReader(dir_images='E:\\DM\\VGG-Face\\aligned')
-    reader = MixedReader([reader_PCD, reader_AR, reader_LFW])
-'''
+class MixedReader(object):
+    def __init__(self, list_readers):
+        self.readers = list_readers
+        
+    def GetTriplet(self):
+        idx = np.random.randint(low=0, high=len(self.readers))
+        path_anchor, path_pos, path_neg = self.readers[idx].GetTriplet()
+        return path_anchor, path_pos, path_neg
         
 def ReadAndResize(filepath):
     im = Image.open((filepath)).convert('RGB')
@@ -115,15 +114,6 @@ def TestCarvana():
     reader = CarvanaReader(dir_images='E:\\DM\\Udacity\\Carvana\\Data\\aligned\\train')
     TestTripletGenerator(reader)
     
-'''
-def TestMix():
-    reader_PCD = PCDReader(dir_images='E:\\DM\\Faces\\Data\\PCD\\aligned')
-    reader_AR = ARFaceReader(dir_images='E:\\DM\\Faces\\Data\\ARFace\\aligned')
-    reader_LFW = LFWReader(dir_images='E:\\DM\\Faces\\Data\\LFW\\aligned')
-    reader = MixedReader([reader_PCD, reader_AR, reader_LFW])
-    print(reader)
-    TestTripletGenerator(reader)
-'''
  
 if __name__=='__main__':
     TestCarvana()
