@@ -54,11 +54,27 @@ def YoloOut2Boxes(net_out, threshold = 0.2, sqrt=1.8,C=20, B=2, S=7):
     for grid in range(SS):
         for b in range(B):
             bx = Box()
+            # Formally we define confidence as Pr(Object) * IOU(truth, predicted). 
+            # If no object exists in that cell, the confidence scores should be
+            # zero. Otherwise we want the confidence score to equal the
+            # intersection over union (IOU) between the predicted box 
+            # and the ground truth.
             bx.c =  confs[grid, b]
+            # The (x, y) coordinates represent the center of the box relative 
+            # to the bounds of the grid cell. 
             bx.x = (cords[grid, b, 0] + grid %  S) / S
             bx.y = (cords[grid, b, 1] + grid // S) / S
+            # Sum-squared error also equally weights errors in large
+            # boxes and small boxes. Our error metric should reflect that
+            # small deviations in large boxes matter less than in small
+            # boxes. To partially address this we predict the square root
+            # of the bounding box width and height instead of the width
+            # and height directly.
             bx.w =  cords[grid, b, 2] ** sqrt 
             bx.h =  cords[grid, b, 3] ** sqrt
+            # Pr(Class(i) | Object) * Pr(Object) * IOU(truth, predicted) = Pr(Class(i)) * IOU(truth, predicted)
+            # for more details, see equation(1) in the paper <You Only Look Once: 
+            # Unified, Real-Time Object Detection>
             p = probs[grid, :] * bx.c
             
             
@@ -66,14 +82,6 @@ def YoloOut2Boxes(net_out, threshold = 0.2, sqrt=1.8,C=20, B=2, S=7):
                 bx.prob = p[class_vehicle]
                 boxes.append(bx)
             
-    boxes.sort(key=lambda b:b.prob,reverse=True)
-    for i in range(len(boxes)):
-        boxi = boxes[i]
-        if boxi.prob == 0: continue
-        for j in range(i + 1, len(boxes)):
-            boxj = boxes[j]
-            if box_iou(boxi, boxj) >= .4:
-                boxes[j].prob = 0.
     boxes = [b for b in boxes if b.prob > 0.]
     
     return boxes
@@ -137,24 +145,32 @@ def Square(left, right, top, bot, max_h, max_w):
         
     return left, right, top, bot
     
-# Crop the origin image so that the output is a square   
-def CropImage(image):
+# Enlarge the origin image so that the output is a square   
+def EnlargeImage(image):
     assert len(image.shape)==3
     h, w, _ = image.shape
     diff1 = np.abs(w-h)//2
     diff2 = np.abs(w-h) - diff1
 
-    w_begin = 0 if w < h else diff1
-    w_end = w if w < h else w - diff2
-    h_begin = 0 if h < w else diff1
-    h_end = h if h < w else h - diff2
+    if h > w:
+        first = np.zeros(shape=[h, diff1, 3], dtype=np.uint8)
+        second = image
+        third = np.zeros(shape=[h, diff2, 3], dtype=np.uint8)
+        enlarged = np.concatenate([first, second, third], axis=1)
     
-    image_cropped = image[h_begin:h_end, w_begin:w_end, :]
-    offset_w = diff1 if w > h else 0
-    offset_h = diff1 if h > w else 0
-    return image_cropped, [offset_h, offset_w]
+    elif w > h:
+        first = np.zeros(shape=[diff1, w, 3], dtype=np.uint8)
+        second = image
+        third = np.zeros(shape=[diff2, w, 3], dtype=np.uint8)
+        enlarged = np.concatenate([first, second, third], axis=0)
+    else:
+        enlarged = image
+        
 
-  
+    offset_w = -diff1 if h > w else 0
+    offset_h = -diff1 if w > h else 0
+    return enlarged, [offset_h, offset_w]
+    
 # Resize the image so that it fits the network inputs
 # it is assumed that the input image is a square image
 def ResizeImage(image, size_target=YOLO_input_size):
@@ -166,7 +182,7 @@ def ResizeImage(image, size_target=YOLO_input_size):
     return image_resized, ratio
     
 def DetectVehicle(image, model, threshold=0.17):
-    image_squared, [offset_h, offset_w] = CropImage(image)
+    image_squared, [offset_h, offset_w] = EnlargeImage(image)
     image_resized, ratio = ResizeImage(image_squared)
     batch = np.transpose(image_resized,(2,0,1))
     batch = 2*(batch/255.) - 1
