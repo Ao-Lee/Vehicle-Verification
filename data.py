@@ -48,6 +48,14 @@ usage:
     reader_LFW = LFWReader(dir_images='E:\\DM\\VGG-Face\\aligned')
     reader = MixedReader([reader_PCD, reader_AR, reader_LFW])
 '''
+class MixedReader(object):
+    def __init__(self, list_readers):
+        self.readers = list_readers
+        
+    def GetTriplet(self):
+        idx = np.random.randint(low=0, high=len(self.readers))
+        path_anchor, path_pos, path_neg = self.readers[idx].GetTriplet()
+        return path_anchor, path_pos, path_neg
         
 def ReadAndResize(filepath):
     im = Image.open((filepath)).convert('RGB')
